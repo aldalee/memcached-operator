@@ -18,24 +18,31 @@ package controllers
 
 import (
 	"context"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"time"
 
+	cachev2 "github.com/aldalee/memcached-operator/api/v2"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	cachev2 "github.com/aldalee/memcached-operator/api/v2"
 )
 
 // MemcachedReconciler reconciles a Memcached object
 type MemcachedReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=cache.memcached.io,resources=memcacheds,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cache.memcached.io,resources=memcacheds/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=cache.memcached.io,resources=memcacheds/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -51,12 +58,24 @@ func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// TODO(user): your logic here
 
-	return ctrl.Result{}, nil
+	// Lookup the Memcached instance for this reconcile request
+	memcached := &cachev2.Memcached{}
+	err := r.Get(ctx, req.NamespacedName, memcached)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{Requeue: true, RequeueAfter: 5 * time.Minute}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
+// specifies how the controller is built to watch a CR and
+// other resources that are owned and managed by that controller
 func (r *MemcachedReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&cachev2.Memcached{}).
+		Owns(&appsv1.Deployment{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 2,
+		}).
 		Complete(r)
 }
