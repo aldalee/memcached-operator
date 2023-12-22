@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"time"
@@ -64,6 +65,21 @@ func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	size := memcached.Spec.Size
+	port := memcached.Spec.ContainerPort
+
+	memcached.Status.Nodes = []string{"pod-1", "pod-2", "pod-3"}
+	err = r.Status().Update(ctx, memcached)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	fmt.Printf("size = %v port = %v\n", size, port)
+
+	for i, node := range memcached.Status.Nodes {
+		fmt.Println(i, node)
+	}
+
 	return ctrl.Result{Requeue: true, RequeueAfter: 5 * time.Minute}, nil
 }
 
